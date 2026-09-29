@@ -1,28 +1,43 @@
-import { Link, useNavigate } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
 import {
   LayoutDashboard,
   ReceiptText,
+  Scale,
   LogOut,
   Menu,
   X,
   Plus,
 } from 'lucide-react'
 import { Logo } from './Logo'
-import { profile } from '@/lib/fixtures'
+import { logout } from '@netlify/identity'
+import { useLedger } from '@/lib/store'
 
 const nav = [
   { to: '/app', label: 'Overview', icon: LayoutDashboard, exact: true },
   { to: '/app/transactions', label: 'Transactions', icon: ReceiptText, exact: false },
+  { to: '/app/balance', label: 'Balance sheet', icon: Scale, exact: false },
 ] as const
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
-  const navigate = useNavigate()
-  const initials = profile.name
+  const { profile } = useLedger()
+  const displayName = profile.name || profile.email.split('@')[0]
+  const initials = displayName
     .split(' ')
     .map((p) => p[0])
     .join('')
+    .slice(0, 2)
+    .toUpperCase()
+
+  const signOut = async () => {
+    try {
+      await logout()
+    } finally {
+      // Full navigation so the server sees the cleared session cookie.
+      window.location.href = '/login'
+    }
+  }
 
   const sidebar = (
     <div className="flex h-full flex-col gap-8 p-6">
@@ -55,12 +70,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {initials}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{profile.name}</p>
+          <p className="truncate text-sm font-semibold">{displayName}</p>
           <p className="truncate text-xs text-ink-soft">{profile.email}</p>
         </div>
         <button
           type="button"
-          onClick={() => navigate({ to: '/login' })}
+          onClick={signOut}
           className="rounded-lg p-2 text-ink-soft transition hover:bg-paper-deep hover:text-clay"
           aria-label="Sign out"
           title="Sign out"

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -13,8 +13,8 @@ import {
   Filler,
 } from 'chart.js'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
-import { ArrowDownRight, ArrowUpRight, ArrowRight, PiggyBank, Wallet, Landmark, Receipt } from 'lucide-react'
-import { balanceSheet, currentMonth, netWorthHistory, profile } from '@/lib/fixtures'
+import { ArrowDownRight, ArrowUpRight, ArrowRight, PiggyBank, Wallet, Landmark, Receipt, Sparkles } from 'lucide-react'
+import { currentMonth } from '@/lib/fixtures'
 import {
   computeIndicators,
   formatDate,
@@ -27,7 +27,7 @@ import {
   summarizeMonth,
   type Indicator,
 } from '@/lib/finance'
-import { useTransactions } from '@/lib/store'
+import { useLedger, useLedgerActions } from '@/lib/store'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend, Filler)
 
@@ -48,7 +48,7 @@ const tooltip = {
 }
 
 function Overview() {
-  const txs = useTransactions()
+  const { transactions: txs, balanceSheet, netWorthHistory, profile } = useLedger()
   const months = previousMonths(currentMonth, 6)
 
   const { summaries, cur, prev, health, worth } = useMemo(() => {
@@ -60,9 +60,11 @@ function Overview() {
       health: computeIndicators(txs, balanceSheet, currentMonth),
       worth: netWorth(balanceSheet),
     }
-  }, [txs])
+  }, [txs, balanceSheet])
 
-  const worthPrev = netWorthHistory[netWorthHistory.length - 2].value
+  const prevMonth = months[months.length - 2]
+  const worthPrev = netWorthHistory.find((p) => p.month === prevMonth)?.value ?? worth.net
+  const firstName = (profile.name || profile.email.split('@')[0]).split(' ')[0]
   const sorted = [...health.indicators].sort((a, b) => a.score - b.score)
   const weakest = sorted[0]
   const strongest = sorted[sorted.length - 1]
@@ -75,7 +77,7 @@ function Overview() {
             {formatMonth(currentMonth, 'long')}
           </p>
           <h1 className="mt-1 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
-            Hello, {profile.name.split(' ')[0]}.
+            Hello, {firstName}.
           </h1>
           <p className="mt-2 max-w-xl text-ink-soft">
             You kept <strong className="text-ink">{formatMoney(cur.income - cur.spending)}</strong> of
@@ -90,6 +92,8 @@ function Overview() {
           + Record entry
         </Link>
       </header>
+
+      {txs.length === 0 && <GettingStarted />}
 
       <section className="grid gap-5 lg:grid-cols-12">
         <HealthScoreCard score={health.score} status={health.status} strongest={strongest} weakest={weakest} />
@@ -211,6 +215,55 @@ function Overview() {
         </Panel>
       </section>
     </div>
+  )
+}
+
+function GettingStarted() {
+  const { loadSample } = useLedgerActions()
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = async () => {
+    setPending(true)
+    setError(null)
+    try {
+      await loadSample()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load the sample ledger.')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <section className="rise flex flex-wrap items-center gap-5 rounded-3xl border border-dashed border-ink/25 bg-card p-6">
+      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brass-soft text-brass">
+        <Sparkles className="h-5 w-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <h2 className="font-display text-xl font-semibold">Your ledger is empty</h2>
+        <p className="mt-0.5 text-sm text-ink-soft">
+          Record your first income or expense, add your savings and debts on the balance sheet, or explore with six months of sample data.
+        </p>
+        {error && <p className="mt-2 text-sm text-clay">{error}</p>}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Link
+          to="/app/balance"
+          className="rounded-full border border-line px-4 py-2 text-sm font-semibold text-ink no-underline transition hover:border-ink"
+        >
+          Set up balance sheet
+        </Link>
+        <button
+          type="button"
+          onClick={load}
+          disabled={pending}
+          className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-paper transition hover:bg-moss disabled:opacity-70"
+        >
+          {pending ? 'Loading…' : 'Load sample ledger'}
+        </button>
+      </div>
+    </section>
   )
 }
 

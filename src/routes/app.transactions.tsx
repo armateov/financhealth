@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { Search, Trash2, X, Plus, Check } from 'lucide-react'
 import { categories, currentMonth, type TransactionType } from '@/lib/fixtures'
 import { formatDate, formatMoney, formatMonth, getCategory, monthKey } from '@/lib/finance'
-import { addTransaction, removeTransaction, useTransactions } from '@/lib/store'
+import { useLedgerActions, useTransactions } from '@/lib/store'
 
 export const Route = createFileRoute('/app/transactions')({
   validateSearch: (search: Record<string, unknown>): { add?: boolean } => ({
@@ -16,15 +16,17 @@ type Filter = 'all' | TransactionType
 
 function Transactions() {
   const txs = useTransactions()
+  const { removeTransaction } = useLedgerActions()
   const { add } = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
   const [filter, setFilter] = useState<Filter>('all')
   const [month, setMonth] = useState<string>(currentMonth)
   const [query, setQuery] = useState('')
   const [flash, setFlash] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   const months = useMemo(
-    () => [...new Set(txs.map((t) => monthKey(t.date)))].sort().reverse(),
+    () => [...new Set([currentMonth, ...txs.map((t) => monthKey(t.date))])].sort().reverse(),
     [txs],
   )
 
@@ -48,6 +50,15 @@ function Transactions() {
   }, [visible])
 
   const closeForm = () => navigate({ search: {} })
+
+  const remove = async (id: string) => {
+    setDeleting(id)
+    try {
+      await removeTransaction(id)
+    } finally {
+      setDeleting(null)
+    }
+  }
 
   return (
     <div className="space-y-7">
@@ -151,7 +162,8 @@ function Transactions() {
                         </span>
                         <button
                           type="button"
-                          onClick={() => removeTransaction(t.id)}
+                          onClick={() => remove(t.id)}
+                          disabled={deleting === t.id}
                           className="rounded-lg p-1.5 text-ink-soft opacity-0 transition hover:bg-clay-soft hover:text-clay focus:opacity-100 group-hover:opacity-100"
                           aria-label={`Delete ${t.description}`}
                         >
@@ -197,8 +209,10 @@ function EntryForm({ onClose, onSaved }: { onClose: () => void; onSaved: (desc: 
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [categoryId, setCategoryId] = useState('groceries')
-  const [date, setDate] = useState(`${currentMonth}-29`)
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [pending, setPending] = useState(false)
+  const { addTransaction } = useLedgerActions()
 
   const options = categories.filter((c) => c.type === type)
 
@@ -207,7 +221,7 @@ function EntryForm({ onClose, onSaved }: { onClose: () => void; onSaved: (desc: 
     setCategoryId(categories.find((c) => c.type === t)!.id)
   }
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     const next: Record<string, string> = {}
     const value = Number(amount)
@@ -216,8 +230,15 @@ function EntryForm({ onClose, onSaved }: { onClose: () => void; onSaved: (desc: 
     if (!date) next.date = 'Pick a date.'
     setErrors(next)
     if (Object.keys(next).length) return
-    addTransaction({ type, amount: Math.round(value * 100) / 100, description: description.trim(), categoryId, date })
-    onSaved(description.trim(), date)
+    setPending(true)
+    try {
+      await addTransaction({ type, amount: Math.round(value * 100) / 100, description: description.trim(), categoryId, date })
+      onSaved(description.trim(), date)
+    } catch (err) {
+      setErrors({ form: err instanceof Error ? err.message : 'Could not save this entry. Try again.' })
+    } finally {
+      setPending(false)
+    }
   }
 
   const field = 'w-full rounded-xl border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink/10'
@@ -304,11 +325,13 @@ function EntryForm({ onClose, onSaved }: { onClose: () => void; onSaved: (desc: 
           </div>
         </div>
 
+        {errors.form && <p className="mt-4 text-sm text-clay">{errors.form}</p>}
         <button
           type="submit"
-          className="mt-6 w-full rounded-xl bg-ink py-3 text-sm font-semibold text-paper transition hover:bg-moss"
+          disabled={pending}
+          className="mt-6 w-full rounded-xl bg-ink py-3 text-sm font-semibold text-paper transition hover:bg-moss disabled:opacity-70"
         >
-          Save {type}
+          {pending ? 'Saving…' : `Save ${type}`}
         </button>
       </form>
     </div>
