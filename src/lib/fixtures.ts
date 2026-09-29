@@ -1,6 +1,6 @@
-// Stubbed data for the product surface. Every screen reads from this module
-// (via src/lib/store.ts), so a later milestone can swap it for real
-// persistence without touching the UI.
+// Domain types, the default category set, and demo data. Signed-in screens
+// read real data through src/lib/store.ts; the demo data here powers the
+// landing page preview and the optional "Load sample ledger" action.
 
 export type TransactionType = 'income' | 'expense'
 
@@ -43,6 +43,21 @@ export interface UserProfile {
   memberSince: string
 }
 
+/** Rows as they are kept on the balance sheet screen. */
+export interface Account {
+  id: string
+  kind: 'savings' | 'investment' | 'asset'
+  name: string
+  balance: number
+}
+
+export interface Debt {
+  id: string
+  name: string
+  balance: number
+  rate: number
+}
+
 export const categories: Category[] = [
   { id: 'salary', label: 'Salary', type: 'income', color: '#1f5c46' },
   { id: 'freelance', label: 'Freelance', type: 'income', color: '#3f8a6c' },
@@ -60,13 +75,6 @@ export const categories: Category[] = [
   { id: 'savings', label: 'Savings & investing', type: 'expense', bucket: 'savings', color: '#16211c' },
 ]
 
-export const profile: UserProfile = {
-  name: 'Maya Torres',
-  email: 'maya@example.com',
-  currency: 'USD',
-  memberSince: '2026-04-01',
-}
-
 export const balanceSheet: BalanceSheet = {
   liquidSavings: 11850,
   investments: 24600,
@@ -78,19 +86,21 @@ export const balanceSheet: BalanceSheet = {
   ],
 }
 
+/** The month the dashboard treats as "current". */
+export const currentMonth = new Date().toISOString().slice(0, 7)
+
+// The six months ending with the current one, oldest first.
+const months = Array.from({ length: 6 }, (_, i) => {
+  const [y, m] = currentMonth.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1 - (5 - i), 1)).toISOString().slice(0, 7)
+})
+
 /** Net worth at the end of each of the previous months, oldest first. */
-export const netWorthHistory = [
-  { month: '2026-04', value: 17150 },
-  { month: '2026-05', value: 18020 },
-  { month: '2026-06', value: 18640 },
-  { month: '2026-07', value: 19710 },
-  { month: '2026-08', value: 20480 },
-  { month: '2026-09', value: 22430 },
-]
+const worthCurve = [17150, 18020, 18640, 19710, 20480, 22430]
+export const netWorthHistory = months.map((month, i) => ({ month, value: worthCurve[i] }))
 
 // Six months of realistic activity: fixed monthly items plus a little
 // deterministic variation so the charts have texture.
-const months = ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09']
 const wobble = [0, 0.06, -0.04, 0.09, -0.02, 0.03]
 
 function buildTransactions(): Transaction[] {
@@ -147,5 +157,9 @@ function buildTransactions(): Transaction[] {
 
 export const transactions: Transaction[] = buildTransactions()
 
-/** The month the dashboard treats as "current". */
-export const currentMonth = '2026-09'
+/** Demo balance sheet split into the rows the balance sheet screen keeps. */
+export const sampleAccounts: Omit<Account, 'id'>[] = [
+  { kind: 'savings', name: 'Emergency fund', balance: balanceSheet.liquidSavings },
+  { kind: 'investment', name: 'Index fund', balance: balanceSheet.investments },
+  { kind: 'asset', name: 'Car', balance: balanceSheet.otherAssets },
+]

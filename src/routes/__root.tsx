@@ -1,4 +1,5 @@
 import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
+import { CallbackHandler } from '@/components/CallbackHandler'
 import '../styles.css'
 
 const siteName = 'Ledgerwise — Income, expenses & financial health'
@@ -59,7 +60,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        {children}
+        <CallbackHandler>{children}</CallbackHandler>
         <Scripts />
       </body>
     </html>

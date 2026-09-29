@@ -1,32 +1,49 @@
-import { useSyncExternalStore } from 'react'
-import type { Transaction } from './fixtures'
-import { transactions as seed } from './fixtures'
+import { getRouteApi, useRouter } from '@tanstack/react-router'
+import { useMemo } from 'react'
+import type { Account, Debt, Transaction } from './fixtures'
+import {
+  createAccount,
+  createDebt,
+  createTransaction,
+  deleteAccount,
+  deleteDebt,
+  deleteTransaction,
+  loadSampleLedger,
+  type Ledger,
+} from '@/server/ledger'
 
-// Client-side ledger seeded from fixtures. A later milestone replaces this
-// with server functions backed by the database; the hook signatures stay.
+// The signed-in user's ledger, loaded by the /app layout from Netlify
+// Database. Mutations call server functions and then reload the layout's
+// data so every screen and indicator reflects the change.
 
-let state: Transaction[] = seed
-const listeners = new Set<() => void>()
+const appRoute = getRouteApi('/app')
 
-const emit = () => listeners.forEach((l) => l())
-
-function subscribe(listener: () => void) {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
+export function useLedger(): Ledger {
+  return appRoute.useLoaderData()
 }
 
 export function useTransactions() {
-  return useSyncExternalStore(subscribe, () => state, () => seed)
+  return useLedger().transactions
 }
 
-export function addTransaction(input: Omit<Transaction, 'id'>) {
-  const tx: Transaction = { ...input, id: `local-${Date.now()}` }
-  state = [tx, ...state].sort((a, b) => b.date.localeCompare(a.date))
-  emit()
-  return tx
-}
-
-export function removeTransaction(id: string) {
-  state = state.filter((t) => t.id !== id)
-  emit()
+export function useLedgerActions() {
+  const router = useRouter()
+  return useMemo(() => {
+    const run =
+      <A extends unknown[], R>(fn: (...args: A) => Promise<R>) =>
+      async (...args: A) => {
+        const result = await fn(...args)
+        await router.invalidate()
+        return result
+      }
+    return {
+      addTransaction: run((input: Omit<Transaction, 'id'>) => createTransaction({ data: input })),
+      removeTransaction: run((id: string) => deleteTransaction({ data: { id } })),
+      addAccount: run((input: Omit<Account, 'id'>) => createAccount({ data: input })),
+      removeAccount: run((id: string) => deleteAccount({ data: { id } })),
+      addDebt: run((input: Omit<Debt, 'id'>) => createDebt({ data: input })),
+      removeDebt: run((id: string) => deleteDebt({ data: { id } })),
+      loadSample: run(() => loadSampleLedger()),
+    }
+  }, [router])
 }
